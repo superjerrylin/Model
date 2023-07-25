@@ -200,7 +200,7 @@ df.loc[df['comm_time'].apply(lambda x: len(str(x))) > 6, 'comm_time'] = 0
 #========================================================#
 #                       文字處理                          #
 #      comm_mode \ comm_plac \ comm_fee \ comm_type      #
-#                                                        #
+#      type1 \ type2                                     #
 #  comm_mode                                             #
 #    1. 计算每个值的数量                                   #
 #    2. 异常值处理                                        #
@@ -219,17 +219,235 @@ df.loc[df['comm_time'].apply(lambda x: len(str(x))) > 6, 'comm_time'] = 0
 #========================================================#
 
 
+#-------------------#
+#     comm_plac     #
+#-------------------#
+
+### 删除空格
+def removespace(x):
+    if '<U+00A0>' in str(x):
+        return str(x).replace('<U+00A0>','')
+    elif '<U+FFFD>' in str(x):
+        return str(x).replace('<U+FFFD>','')
+    else:
+        return x
+
+### 查询有“费”和“元”这个字，取数字
+def plac_fee(x):
+    if '费' in str(x['comm_plac']):
+        return x['comm_plac'].split(":")[1].split("元")[0]
+    else:
+        return x['comm_fee']
+
+### 只保留汉字
+def plac_ch(x):
+    
+    return re.sub("[A-Za-z0-9_.!+-=——,$%^，（。）；？、~@?#￥%……&*《》<>「」{}【】()/\\\[\]'\"]","", str(x))  # 删除英文、数字、符号
+    #sen_text = re.compile(u'[\u4E00-\u9FA5|\s\w]').findall(str(x['comm_plac']))
+    #return "".join(sen_text)
+
+### 城市转换成一线、新一线、二线、三线及以下城市、其他地区
+fst_plac = ['北京','上海','广州','深圳']
+newfst_plac = ['成都','杭州','重庆','武汉','西安',
+               '苏州','天津','南京','长沙','郑州',
+               '东莞','青岛','沈阳','宁波','佛山']
+snd_plac = ['合肥','昆明','无锡','厦门','济南','福州','温州','大连','长春','泉州',
+            '石家庄','南宁','金华','哈尔滨','贵阳','南昌','常州','嘉兴','珠海','惠州',
+            '中山','南通','太原','徐州','绍兴','台州','烟台','兰州','潍坊','临沂']
+
+other_plac = ['香港','澳门','台湾','港澳台','国际','韩国','日本','芬兰','罗马尼亚']
+
+def trans_plac(x):
+    if x == '本地':
+        return '本地地区'
+    elif x in other_plac:   # 其他地区
+        return 'other_plac'
+    elif x in snd_plac:     # 二线城市
+        return '2nd_plac'
+    elif x in newfst_plac:  # 新一线城市
+        return 'new1st_plac'
+    elif x in fst_plac:     # 一线城市
+        return '1st_plac'  
+    else:                   # 三线及以下城市
+        return '3rd_plac'
+        
+### 删除空格
+df['comm_plac'] = df['comm_plac'].apply(lambda x: removespace(x))
+
+### 有"费"的数据提取到start_time_fee列，提取完赋予空值
+df['comm_plac_fee'] = df.apply(lambda x: plac_fee(x), axis = 1)
+df['comm_plac'] = df['comm_plac'].apply(lambda x: '' if '费' in str(x) else x)
+
+### 提取汉字
+df['comm_plac'] = df.apply(lambda x: plac_ch(x['comm_plac']), axis = 1)
+
+### 城市等级
+df['city_level'] = df.apply(lambda x: trans_plac(x['comm_plac']), axis = 1)
 
 
+#------------------#
+#     comm_fee     #
+#------------------#
+### 删除空格
+def removespace(x):
+    if '<U+00A0>' in str(x):
+        return str(x).replace('<U+00A0>','')
+    elif '<U+FFFD>' in str(x):
+        return str(x).replace('<U+FFFD>','')
+    else:
+        return x
+
+### 删除“元”、“分”、“角”
+def fee_outlier(x):
+    
+    # string 转 list
+    ch_last = list(str(x))[-1]
+    
+    if '元' in ch_last:
+        return re.sub('元', '', str(x))
+    elif '分' in ch_last:
+        dollar_1 = re.sub('分', '', str(x))
+        return str(float(dollar_1)/100)
+    elif '角' in ch_last:
+        dollar_2 = re.sub('角', '', str(x))
+        return str(float(dollar_2)/10)
+    else:
+        return str(x)
+
+### 异常值处理：包含大量中文，与金钱无相关
+def fee_ch_outlier(x):
+    try:
+        return float(x)
+    except:
+        return -1
+    
+### 取comm_fee、comm_plac_fee、start_time_fee的最大值
+def fee_max(x):
+    fee_list = []
+    
+    plac_fee_cl1 = removespace(x['comm_plac_fee'])
+    plac_fee_cl2 = fee_outlier(plac_fee_cl1)
+    plac_fee_cl3 = fee_ch_outlier(plac_fee_cl2)
+    
+    time_fee_cl1 = removespace(x['start_time_fee'])
+    time_fee_cl2 = fee_outlier(time_fee_cl1)
+    time_fee_cl3 = fee_ch_outlier(time_fee_cl2)
+    
+    comm_fee1 = fee_ch_outlier(x['comm_fee'])
+    
+    fee_list.append(comm_fee1)
+    fee_list.append(float(plac_fee_cl3))
+    fee_list.append(float(time_fee_cl3))
+    
+    return max(fee_list)
+
+### 删除空格
+df['comm_fee'] = df['comm_fee'].apply(lambda x: removespace(x))
+
+### 删除“元”、“分”、“角”
+df['comm_fee'] = df.apply(lambda x: fee_outlier(x['comm_fee']), axis = 1)
+
+### 异常值处理：包含大量中文，与金钱无相关
+df['comm_fee'] = df['comm_fee'].apply(lambda x: fee_ch_outlier(x))
+
+### 取comm_fee、comm_plac_fee、start_time_fee的最大值
+df['comm_fee'] = df.apply(lambda x: fee_max(x), axis = 1)
+
+#-------------------#
+#     comm_type     #
+#-------------------#
+### 通话种类转换
+
+def type_group(x):
+    if '国内漫游' in str(x):
+        return '国内漫游'
+    elif '国内长途' in str(x):
+        return '国内长途'
+    elif '省内长途' in str(x):
+        return '省内长途'
+    elif '省际长途' in str(x):
+        return '省际长途'
+    elif '省内漫游' in str(x):
+        return '省内漫游'
+    elif '省际漫游' in str(x):
+        return '省际漫游'
+    elif '非漫游' in str(x):
+        return '非漫游'
+    elif '本地市话' in str(x):
+        return '本地市话'
+    elif 'VPMN' in str(x):
+        return 'VPMN'
+    elif '本地(非漫游、被叫)' in str(x):
+        return '本地(非漫游、被叫)'
+    elif '本地市话' in str(x):
+        return '本地市话'
+    elif '市话' in str(x):
+        return '市话'
+    elif '国内' in str(x):
+        return '国内'
+    elif '普通语音' in str(x):
+        return '普通语音'
+    elif '省内' in str(x):
+        return '省内'
+    elif '省际' in str(x):
+        return '省际'
+    elif '漫游' in str(x):
+        return '漫游'
+    elif '本地' in str(x):
+        return '本地'
+    elif '长途' in str(x):
+        return '长途'
+    else:
+        return ''
+
+df['comm_type_1'] = df.apply(lambda x: type_group(x['comm_type']), axis = 1)
+
+#-----------------#
+#      type2      #
+#-----------------#
+
+def type2_group(x):
+    one_word = ''
+    two_word = ''
+    
+    one_word = list(x)[-1]
+    if len(str(x)) > 1:
+        two_word = list(x)[-2] + list(x)[-1]
+    
+    if x in ['招商','建行','北银','浦发','民生','华夏'] or two_word in ['银行']:
+        return '银行'
+    elif x in ['德邦','圆通','邮政','中通','韵达','宅急送','全峰','其它快递','申通','园通']:
+        return '快递'
+    elif x in ['好贷网','玖富','花呗','恒昌','捷信','宜信','借贷宝','分期乐','借贷保','马上','信用宝','融360','白条','贷小秘','现金巴士','佰仟'] \
+                or one_word in ['贷'] or two_word in ['分期','贷款']:
+        return '贷款相关'
+    elif x in ['麦当劳','其它外卖','美团','肯德基','饿了么','必胜','广发']:
+        return '外卖'
+    elif x in ['信通','新联','通信']:
+        return '通信'
+    elif x in ['信和','汉力','地产','融信']:
+        return '地产'
+    elif x in ['信用卡','百世汇通']:
+        return '信用卡'
+    elif x in ['普通标记']:
+        return '普通标记'
+    elif x in ['骚扰','诈骗','套现','养卡','抵押','黑名单','法院','黑户','其它催收','律师']:
+        return '不良标识'
+    elif x in ['广告推销']:
+        return '广告推销'
+    else:
+        return '其他'
+
+df['type2_1'] = df.apply(lambda x: type2_group(x['type2']), axis = 1)
 
 
-
-
-
-
-
-
-
+### 保存清洗完的数据
+# 筛选符合时间范围
+drop_var = ['start_time_fee','comm_plac_fee']
+df = df.drop(drop_var, axis = 1)
+df = df[df['app_date'] >= df['start_time']]
+df = df.drop_duplicates()
+df.to_csv('df_clean.csv', encoding = 'gbk', index = False)
 
 
 
