@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import datetime
 import random
+import time
 import math
 import re
 
@@ -17,31 +18,31 @@ df.describe()
 
 
 #========================================================#
-#                       時間格式處理
-#     start_time \ update_time \ app_date \ comm_time
-#
-#  start_time
-#    1. 先计算长度
-#    2. 空格符处理
-#    3. 有"费"的数据提取到新的列，原来值填充为空
-#    4. 文本分析
-#    5. 异常值处理
-#    6. 时间格式统一
-#    7. 缺失值填充为 2100-12-31
-#  update_time
-#    1. 空格符处理
-#    2. 异常值处理
-#    3. 时间格式统一
-#    4. 缺失值填充为 2100-12-31
-#  app_date
-#    1. 空格符处理
-#    2. 时间格式统一
-#    3. 缺失值填充为 2100-12-31
-#  comm_time
-#    1. 空格符处理
-#    2. 计算长度
-#    3. 异常值处理
-#    4. 缺失值填充 -1
+#                       時間格式處理                      #
+#     start_time \ update_time \ app_date \ comm_time    #
+#                                                        #
+#  start_time                                            #
+#    1. 先计算长度                                        #
+#    2. 空格符处理                                        #
+#    3. 有"费"的数据提取到新的列，原来值填充为空             #
+#    4. 文本分析                                          #
+#    5. 异常值处理                                        #
+#    6. 时间格式统一                                      #
+#    7. 缺失值填充为 2100-12-31                           #
+#  update_time                                           #
+#    1. 空格符处理                                        #
+#    2. 异常值处理                                        #
+#    3. 时间格式统一                                      #
+#    4. 缺失值填充为 2100-12-31                           #
+#  app_date                                              #
+#    1. 空格符处理                                        #
+#    2. 时间格式统一                                      #
+#    3. 缺失值填充为 2100-12-31                           #
+#  comm_time                                             #
+#    1. 空格符处理                                        #
+#    2. 计算长度                                          #
+#    3. 异常值处理                                        #
+#    4. 缺失值填充 -1                                     #
 #========================================================#
 
 #----------------#
@@ -151,6 +152,80 @@ df['start_time'] = pd.to_datetime(df['start_time'])
 #-------------------#
 #    update_time    #
 #-------------------#
+
+# 13位的数字串是毫秒级别的时间戳，通过下边的代码转换为表转格式：
+def timenum_13_fun(x):
+    if len(str(x)) == 13:
+        timeNum = int(x)
+        timeTemp = float(timeNum/1000)
+        tupTime = time.localtime(timeTemp)
+        stadardTime = time.strftime("%Y-%m-%d %H:%M:%S", tupTime)
+        return stadardTime
+    else:
+        return x
+### 数字时间转换
+df['update_time'] = df['update_time'].apply(lambda x: timenum_13_fun(x))
+
+### 时间统一转换成时间格式
+df['update_time'] = pd.to_datetime(df['update_time'])
+
+
+#------------------#
+#     app_date     #
+#------------------#
+### 查看不同长度的结果
+df.loc[df['app_date'].apply(lambda x: len(str(x))) == 10, 'app_date'].value_counts()
+
+### 修正长度为3，空值赋予
+df.loc[df['app_date'].apply(lambda x: len(str(x))) == 3, 'app_date'] = '2100/12/31 00:00:00'
+
+### 时间统一转换成时间格式
+df['app_date'] = pd.to_datetime(df['app_date'])
+
+
+#-------------------#
+#     comm_time     #
+#-------------------#
+
+### 删除空格
+df['comm_time'] = df['comm_time'].apply(lambda x: removespace(x))
+
+### 统一格式：小数点后两位
+df['comm_time'] = df['comm_time'].apply(lambda x: round(float(x), 2))
+
+### 异常值：赋值为0
+df.loc[df['comm_time'].apply(lambda x: len(str(x))) > 6, 'comm_time'] = 0
+
+
+#========================================================#
+#                       文字處理                          #
+#      comm_mode \ comm_plac \ comm_fee \ comm_type      #
+#                                                        #
+#  comm_mode                                             #
+#    1. 计算每个值的数量                                   #
+#    2. 异常值处理                                        #
+#  comm_plac                                             #
+#    1. 空格符处理                                        #
+#    2. 与费用相关的，新增费用字段，最终再做比较             #
+#    3. 字符串处理(如：特殊符号)                           #
+#    4. 城市等级转换                                      #
+#  comm_fee                                              #
+#    1. 空格符处理                                        #
+#    2. 异常值处理(如：包含非数字)                         #
+#    3. 与新衍生出来的费用(start_time_fee\comm_plac_fee)   #
+#       进行比较，取最大值                                 #
+#  comm_type                                             #
+#    1. 通话种类转换                                      #
+#========================================================#
+
+
+
+
+
+
+
+
+
 
 
 
