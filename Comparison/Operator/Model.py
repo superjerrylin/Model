@@ -418,5 +418,66 @@ with open('model/model_lr_best.pkl','wb') as f:
 ###    模型兩兩組合預測值，在執行LR     ###
 #########################################
 
+### 合并所有预测结果
+train_all_pred = pd.DataFrame()
+train_all_pred['label'] = y_train.copy()
+train_all_pred['lr'] = train_pred_lr.copy()
+train_all_pred['xgb'] = train_pred_xgb.copy()
+train_all_pred['lgbm'] = train_pred_lgbm.copy()
+train_all_pred['gbdt'] = train_pred_gbdt.copy()
+train_all_pred['cnn'] = train_pred_cnn.copy()
+train_all_pred['lstm'] = train_pred_lstm.copy()
+print(train_all_pred.shape)
+
+# test
+test_all_pred = pd.DataFrame()
+test_all_pred['label'] = y_test.copy()
+test_all_pred['lr'] = test_pred_lr.copy()
+test_all_pred['xgb'] = test_pred_xgb.copy()
+test_all_pred['lgbm'] = test_pred_lgbm.copy()
+test_all_pred['gbdt'] = test_pred_gbdt.copy()
+test_all_pred['cnn'] = test_pred_cnn.copy()
+test_all_pred['lstm'] = test_pred_lstm.copy()
+print(test_all_pred.shape)
+
+### 两两模型预测值重新训练
+model_name = ['lr','xgb','lgbm','gbdt','cnn','lstm']
+tmp_model_name = model_name.copy()
+result_mix_auc = pd.DataFrame()
+cnt = 0
+
+for i in model_name:
+    tmp_name = []
+    tmp_name.append(i)
+    tmp_model_name.remove(i)
+    
+    for j in tmp_model_name:
+
+        tmp_name.append(j)
+        result_mix_auc.loc[cnt,'model_name'] = '_'.join(tmp_name)
+        tmp_tr_data = train_all_pred[tmp_name]
+        tmp_ts_data = test_all_pred[tmp_name]
+
+        ### 模型训练
+        model_mix_lr = LogisticRegression().fit(tmp_tr_data, train_all_pred['label'])
+
+        ### 模型预测
+        train_pred_lr = model_mix_lr.predict_proba(tmp_tr_data)[:,1]
+        train_auc_lr = roc_auc_score(train_all_pred['label'], train_pred_lr)
+        result_mix_auc.loc[cnt,'train_auc'] = train_auc_lr
+        
+        test_pred_lr = model_mix_lr.predict_proba(tmp_ts_data)[:,1]
+        test_auc_lr = roc_auc_score(test_all_pred['label'], test_pred_lr)
+        result_mix_auc.loc[cnt,'test_auc'] = test_auc_lr
+        
+        tmp_name.remove(j)
+        
+        cnt += 1
+        
+    cnt += 1
+
+print(result_mix_auc)
+
+
 
 
